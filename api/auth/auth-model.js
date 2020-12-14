@@ -1,36 +1,25 @@
-const knex = require('knex');
 const db = require('../../data/dbConfig');
-const jwt = require('jsonwebtoken');
-
-function getUsers() {
-	return db('users');
-}
-
-async function getUserByUsername(username) {
-	const user = await db('users').where({ username }).first();
-	return { ...user, token: generateToken(user) };
-}
-
-async function insertUser(user) {
-	const index = await db('users').insert(user);
-
-	return getUserByUsername(user.username);
-}
-
-function generateToken(user) {
-	const payload = {
-		subject: user.id,
-		username: user.username,
-	};
-	const secret = process.env.JWT_SECRET || "it's a secret to everyone";
-	const options = {
-		expiresIn: '1d',
-	};
-	return jwt.sign(payload, secret, options);
-}
 
 module.exports = {
-	getUsers,
-	getUserByUsername,
-	insertUser,
+	add,
+	find,
+	findBy,
+	findById,
 };
+
+function find() {
+	return db('users').select('id, ;username').orderBy('id');
+}
+
+function findBy(filter, select) {
+	return db('users').select(select).where(filter);
+}
+
+async function add(user) {
+	const [id] = await db('users').insert(user, 'id');
+	return findById(id);
+}
+
+async function findById(id) {
+	return db('users').where({ id }).first();
+}

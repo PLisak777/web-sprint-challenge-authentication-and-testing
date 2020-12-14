@@ -1,40 +1,61 @@
+const jwt = require('jsonwebtoken');
 const router = require('express').Router();
 const bcrypt = require('bcryptjs');
-const db = require('./auth-model');
-const registerUser = require('./registerUser');
+const secrets = require('./secrets');
+const Users = require('./auth-model');
 
-router.post('/register', async (req, res) => {
-	try {
-		const user = req.body;
-		const newUser = await registerUser(user);
+router.post('/register', (req, res, next) => {
+	const { username, password } = req.body;
+	const rounds = process.env.HASH_ROUNDS || 8;
+	const hash = bcrypt.hashSync(password, rounds);
 
-		res.status(201).json(newUser);
-	} catch (err) {
-		res.status(500).json({
-			message: 'There was a problem creating a new user',
-			error: err,
-		});
-	}
+	Users.add({ username, password: hash }).then((user) => {
+		const token = generateToken(user);
+		res
+			.status(201)
+			.json({
+				token,
+			})
+			.catch((err) => {
+				console.error(err);
+				next({
+					code: 500,
+					message: 'Unable to create new user',
+				});
+			});
+	});
 });
 
-router.post('/login', async (req, res) => {
-	try {
-		const { username, password } = req.body;
-		const user = await db.getUserByUsername(username);
+router.post('/login', (req, res, next) => {
+	const { username, password } = req.body;
 
+	Users.findBy({ username }).then(([user]) => {
 		if (user && bcrypt.compareSync(password, user.password)) {
-			res.status(200).json(user);
-		} else {
-			res.status(403).json({
-				message: 'Sorry, unable to locate user',
+			const token = generateToken(user);
+			res.json({ token });
+		} else
+			next({
+				code: 401,
+				message: 'You shall not pass!',
+			}).catch((err) => {
+				console.error(err);
+				next({
+					code: 500,
+					message: 'Unable to log in',
+				});
 			});
-		}
-	} catch (err) {
-		res.status(500).json({
-			message: 'Unable to log in',
-			error: err,
-		});
-	}
+	});
 });
 
 module.exports = router;
+
+function generateToken(user) {
+	const payload = {
+		userId: user.id,
+		username: user.username,
+	};
+	const options = {
+		expiresIn: '1d',
+	};
+	return jwt.sign(payload, secrets.jwtSecret, options);
+}
